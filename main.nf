@@ -13,6 +13,7 @@ include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { configure_igv } from './lib/common'
 include { reference_assembly } from './subworkflows/reference_assembly'
 include { differential_expression } from './subworkflows/differential_expression'
+include { quant_transcript } from './subworkflows/quant_transcript'
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
 
@@ -725,7 +726,52 @@ workflow pipeline {
             transcriptome_summary = OPTIONAL_FILE
             use_ref_ann = false
         }
-        if (params.de_analysis){
+        // Add the new parameter validation
+        if (params.quant_transcript && params.de_analysis) {
+            error "You cannot enable both `--quant_transcript` and `--de_analysis` at the same time."
+        }
+        if (params.quant_transcript) {
+            log.info("Quantifying transcripts without performing downstream DE analysis.")
+        }   
+        // Modify the workflow logic
+        if (params.quant_transcript) {
+            sample_sheet = file(params.sample_sheet, type:"file")
+            // check ref annotation contains only + or - strand as DE analysis will error on .
+            check_annotation_strand(ref_annotation).map { stdoutput, annotation ->
+            // check if there was an error message
+            if (stdoutput) error "In ref_annotation, transcript features must have a strand of either '+' or '-'."
+                    stdoutput
+                }
+
+            // Only count transcripts
+            if (!params.ref_transcriptome) {
+                validate_ref_annotation(ref_annotation, ref_genome).map { stdoutput ->
+                    if (stdoutput) {
+                        log.warn(stdoutput)
+                    }
+                }
+                merge_transcriptomes(run_gffcompare.output.gtf.collect(), ref_annotation, ref_genome)
+                transcriptome = merge_transcriptomes.out.fasta
+                gtf = merge_transcriptomes.out.gtf
+            } else {
+                transcriptome = Channel.fromPath(ref_transcriptome)
+                if (file(params.ref_transcriptome).extension == "gz") {
+                    transcriptome = decompress_transcriptome(ref_transcriptome)
+                }
+                transcriptome = preprocess_ref_transcriptome(transcriptome)
+                gtf = ref_annotation
+            }
+
+            // Skip DE analysis
+            de_report = OPTIONAL_FILE
+            de_alignment_stats = OPTIONAL_FILE
+
+            // run quantification 
+            qaunt = quant_transcript(transcriptome, full_len_reads.map{ sample_id, reads -> [[alias:sample_id], reads]}, sample_sheet)
+            quant_counts = quant.merge_counts
+            quant_tpms = quant.merge_TPM
+
+        } else if (params.de_analysis){
             sample_sheet = file(params.sample_sheet, type:"file")
             // check ref annotation contains only + or - strand as DE analysis will error on .
             check_annotation_strand(ref_annotation).map { stdoutput, annotation ->
@@ -806,6 +852,13 @@ workflow pipeline {
         }
 
        results = results.map{ [it, null] }.concat(fastq_ingress_results.map { [it, "fastq_ingress_results"] })
+
+        // Add the quantification results 
+        if (params.quant_transcript){
+            quant_counts = quant_counts.map{ [it, "quant_counts"] }
+            quant_tpms = quant_tpms.map{ [it, "quant_tpms"] }
+            results = results.concat(quant_counts, quant_tpms)
+        }
 
         if (params.de_analysis){
            de_results = report.concat(
