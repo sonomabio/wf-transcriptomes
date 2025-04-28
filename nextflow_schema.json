@@ -245,6 +245,20 @@
                 }
             }
         },
+        "quant_transcript_options":{
+            "title": "Quantification Options",
+            "type": "object",
+            "description": "Options relevant to the quantification transcripts.",
+            "default":"",
+            "properties": {
+                "quant_transcript": {
+                    "type": "boolean",
+                    "default": false,
+                    "title": "Quantification of transcripts",
+                    "description": "Run quantification of transcripts",
+                    "help_text": "Running this requires you to provide a reference transcriptome and annotation file."
+                }
+        },
         "advanced_options": {
             "title": "Advanced Options",
             "type": "object",
