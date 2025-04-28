@@ -1,4 +1,6 @@
 // import build_minimap_index_transcriptome process from differential_expression.nf
+nextflow.enable.dsl=2
+
 include { 
     build_minimap_index_transcriptome,
     map_transcriptome,
