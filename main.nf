@@ -857,7 +857,8 @@ workflow pipeline {
         if (params.quant_transcript){
             quant_counts = quant_counts.map{ [it, "quant_counts"] }
             quant_tpms = quant_tpms.map{ [it, "quant_tpms"] }
-            results = results.concat(quant_counts, quant_tpms)
+            results = results.concat(quant_counts)
+            results = results.concat(quant_tpms)
         }
 
         if (params.de_analysis){
